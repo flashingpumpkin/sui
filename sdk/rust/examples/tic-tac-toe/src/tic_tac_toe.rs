@@ -15,9 +15,7 @@ use sui_client::apis::{
 use sui_client::keystore::{Keystore, SuiKeystore};
 use sui_client::SuiRpcClient;
 use sui_json::SuiJsonValue;
-use sui_json_rpc_types::{
-    GetObjectDataResponse, GetRawObjectDataResponse, TransactionBytes, TransactionResponse,
-};
+use sui_json_rpc_types::GetObjectDataResponse;
 
 use sui_types::base_types::{ObjectID, SuiAddress};
 use sui_types::id::VersionedID;
@@ -111,7 +109,7 @@ impl TicTacToe {
         println!("Player X : {}", player_x);
         println!("Player O : {}", player_o);
 
-        self.join_game(game_id, player_x);
+        self.join_game(game_id, player_x).await?;
         Ok(())
     }
 
@@ -121,22 +119,20 @@ impl TicTacToe {
         my_identity: SuiAddress,
     ) -> Result<(), anyhow::Error> {
         let current_game = self.client.get_raw_object(game_id).await?;
+        let current_game_bytes = current_game
+            .object()?
+            .data
+            .try_as_move()
+            .map(|m| &m.bcs_bytes)
+            .unwrap();
 
-        let game_state: TicTacToeState = bcs::from_bytes(
-            &current_game
-                .into_object()?
-                .data
-                .try_as_move()
-                .unwrap()
-                .bcs_bytes,
-        )?;
-
+        let game_state: TicTacToeState = bcs::from_bytes(current_game_bytes)?;
         if game_state.o_address == my_identity {
             println!("You are player O")
         } else if game_state.x_address == my_identity {
             println!("You are player X")
         } else {
-            return Err(anyhow!("You are not in the game."));
+            return Err(anyhow!("You are not invited to the game."));
         }
 
         let current_player = if game_state.cur_turn % 2 == 0 {
@@ -146,7 +142,9 @@ impl TicTacToe {
         };
 
         if current_player == my_identity {
+            println!("It's your turn!");
         } else {
+            println!("Waiting for opponent...");
         }
 
         loop {
